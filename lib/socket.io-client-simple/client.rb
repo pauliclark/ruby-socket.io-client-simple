@@ -49,8 +49,11 @@ module SocketIO
         def connect
           query = @opts.map{|k,v| URI.encode "#{k}=#{v}" }.join '&'
           begin
+            p 'Connect socket attempt'
             @websocket = WebSocket::Client::Simple.connect "#{@url}/socket.io/?#{query}"
+            p 'Socket connected'
           rescue Errno::ECONNREFUSED => e
+            p 'Connection refused'
             @state = :disconnect
             @reconnecting = false
             reconnect
@@ -62,8 +65,10 @@ module SocketIO
 
           @websocket.on :error do |err|
             if err.kind_of? Errno::ECONNRESET and this.state == :connect
+              p 'Connection reset'
               this.state = :disconnect
               this.__emit :disconnect
+              @reconnecting = false
               this.reconnect
               next
             end
@@ -74,8 +79,10 @@ module SocketIO
             next unless msg.data =~ /^\d+/
             code, body = msg.data.scan(/^(\d+)(.*)$/)[0]
             code = code.to_i
+            this.reconnecting = false
             case code
             when 0  ##  socket.io connect
+          p 'Socket connection'
               body = JSON.parse body rescue next
               this.session_id = body["sid"] || "no_sid"
               this.ping_interval = body["pingInterval"] || 25000
@@ -90,7 +97,7 @@ module SocketIO
               this.websocket.close if this.websocket.open?
               this.state = :disconnect
               this.__emit :disconnect
-              reconnect
+              this.reconnect
             when 42  ## data
               data = JSON.parse body rescue next
               event_name = data.shift
@@ -101,12 +108,24 @@ module SocketIO
           return self
         end
 
+
+        def close
+          p 'Socket closing'
+         @websocket.close unless @websocket.nil?
+        end
         def reconnect
-          return unless @auto_reconnection
-          return if @reconnecting
-          @reconnecting = true
-          sleep rand(5) + 5
-          connect
+          begin
+            close if open?
+          ensure
+            p 'Already reconnecting' if @reconnecting
+            p 'No auto reconnect'  unless @auto_reconnection
+            return unless @auto_reconnection
+            return if @reconnecting
+            @reconnecting = true
+            sleep rand(5) + 5
+            p 'Socket reconnect'
+            connect
+          end
         end
 
         def open?
@@ -122,8 +141,11 @@ module SocketIO
 
         def disconnect
           @auto_reconnection = false
-          @websocket.close
-          @state = :disconnect
+          begin
+            close
+          ensure
+           @state = :disconnect
+          end
         end
 
       end

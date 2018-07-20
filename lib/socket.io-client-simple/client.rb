@@ -33,10 +33,10 @@ module SocketIO
                   end
                 end
                 if @websocket.open? and Time.now.to_i - @last_pong_at > @ping_timeout/1000
-                  @websocket.close
-                  @state = :disconnect
-                  __emit :disconnect
-                  reconnect
+                #  @websocket.close
+                #  @state = :disconnect
+                #  __emit :disconnect
+                #  reconnect
                 end
               end
               sleep 1
@@ -76,7 +76,7 @@ module SocketIO
           end
 
           @websocket.on :message do |msg|
-           # puts msg
+            puts msg
             next unless msg.data =~ /^\d+/
             code, body = msg.data.scan(/^(\d+)(.*)$/)[0]
             code = code.to_i

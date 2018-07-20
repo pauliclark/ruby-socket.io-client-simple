@@ -49,11 +49,11 @@ module SocketIO
         def connect
           query = @opts.map{|k,v| URI.encode "#{k}=#{v}" }.join '&'
           begin
-            p 'Connect socket attempt'
+            puts 'Connect socket attempt'
             @websocket = WebSocket::Client::Simple.connect "#{@url}/socket.io/?#{query}"
-            p 'Socket connected'
+            puts 'Socket connected'
           rescue Errno::ECONNREFUSED => e
-            p 'Connection refused'
+            puts 'Connection refused'
             @state = :disconnect
             @reconnecting = false
             reconnect
@@ -65,7 +65,7 @@ module SocketIO
 
           @websocket.on :error do |err|
             if err.kind_of? Errno::ECONNRESET and this.state == :connect
-              p 'Connection reset'
+              puts 'Connection reset'
               this.state = :disconnect
               this.__emit :disconnect
               @reconnecting = false
@@ -76,13 +76,14 @@ module SocketIO
           end
 
           @websocket.on :message do |msg|
+            puts msg
             next unless msg.data =~ /^\d+/
             code, body = msg.data.scan(/^(\d+)(.*)$/)[0]
             code = code.to_i
             this.reconnecting = false
             case code
             when 0  ##  socket.io connect
-          p 'Socket connection'
+              puts 'Socket connection'
               body = JSON.parse body rescue next
               this.session_id = body["sid"] || "no_sid"
               this.ping_interval = body["pingInterval"] || 25000
@@ -110,20 +111,20 @@ module SocketIO
 
 
         def close
-          p 'Socket closing'
+          puts 'Socket closing'
          @websocket.close unless @websocket.nil?
         end
         def reconnect
           begin
             close if open?
           ensure
-            p 'Already reconnecting' if @reconnecting
-            p 'No auto reconnect'  unless @auto_reconnection
+            puts 'Already reconnecting' if @reconnecting
+            puts 'No auto reconnect'  unless @auto_reconnection
             return unless @auto_reconnection
             return if @reconnecting
             @reconnecting = true
             sleep rand(5) + 5
-            p 'Socket reconnect'
+            puts 'Socket reconnect'
             connect
           end
         end

@@ -76,7 +76,7 @@ module SocketIO
           end
 
           @websocket.on :message do |msg|
-            puts msg
+           # puts msg
             next unless msg.data =~ /^\d+/
             code, body = msg.data.scan(/^(\d+)(.*)$/)[0]
             code = code.to_i

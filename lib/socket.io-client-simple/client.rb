@@ -33,10 +33,10 @@ module SocketIO
                   end
                 end
                 if @websocket.open? and Time.now.to_i - @last_pong_at > @ping_timeout/1000
-                #  @websocket.close
-                #  @state = :disconnect
-                #  __emit :disconnect
-                #  reconnect
+                  @websocket.close
+                  @state = :disconnect
+                  __emit :disconnect
+                  reconnect
                 end
               end
               sleep 1
@@ -49,11 +49,11 @@ module SocketIO
         def connect
           query = @opts.map{|k,v| URI.encode "#{k}=#{v}" }.join '&'
           begin
-            puts 'Connect socket attempt'
+            puts "Connect socket attempt to #{@url}"
             @websocket = WebSocket::Client::Simple.connect "#{@url}/socket.io/?#{query}"
             puts 'Socket connected'
           rescue Errno::ECONNREFUSED => e
-            puts 'Connection refused'
+            puts "Connection refused to #{@url}"
             @state = :disconnect
             @reconnecting = false
             reconnect

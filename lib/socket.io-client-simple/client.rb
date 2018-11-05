@@ -23,16 +23,18 @@ module SocketIO
           @state = :disconnect
           @auto_reconnection = true
 
+          this = self
+
           Thread.new do
             loop do
               if @websocket
                 if @state == :connect
-                  if Time.now.to_i - @last_ping_at > @ping_interval/1000
+                  if Time.now.to_i - this.last_pong_at > @ping_interval/1000
                     @websocket.send "2"  ## ping
-                    @last_ping_at = Time.now.to_i
+                    this.last_pong_at = Time.now.to_i
                   end
                 end
-                if @websocket.open? and Time.now.to_i - @last_pong_at > @ping_timeout/1000
+                if @websocket.open? and Time.now.to_i - this.last_pong_at > @ping_timeout/1000
                   @websocket.close
                   @state = :disconnect
                   __emit :disconnect
@@ -50,6 +52,8 @@ module SocketIO
           query = @opts.map{|k,v| URI.encode "#{k}=#{v}" }.join '&'
           begin
             puts "Connect socket attempt to #{@url}"
+            threadCount=Thread.list.select {|thread| thread.status == "run"}.count
+            puts "Threads #{threadCount} counted"
             @websocket = WebSocket::Client::Simple.connect "#{@url}/socket.io/?#{query}"
             puts 'Socket connected'
           rescue Errno::ECONNREFUSED => e
@@ -76,7 +80,7 @@ module SocketIO
           end
 
           @websocket.on :message do |msg|
-            puts msg
+           # puts msg
             next unless msg.data =~ /^\d+/
             code, body = msg.data.scan(/^(\d+)(.*)$/)[0]
             code = code.to_i
@@ -93,6 +97,7 @@ module SocketIO
               this.state = :connect
               this.__emit :connect
             when 3  ## pong
+              p "Pong"
               this.last_pong_at = Time.now.to_i
             when 41  ## disconnect from server
               this.websocket.close if this.websocket.open?

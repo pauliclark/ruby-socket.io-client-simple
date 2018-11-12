@@ -12,7 +12,7 @@ module SocketIO
         include EventEmitter
         alias_method :__emit, :emit
 
-        attr_accessor :auto_reconnection, :websocket, :url, :reconnecting, :state,
+        attr_accessor :auto_reconnection, :websocket, :url, :reconnecting, :state, :attempts,
                       :session_id, :ping_interval, :ping_timeout, :last_pong_at, :last_ping_at
 
         def initialize(url, opts={})
@@ -22,6 +22,7 @@ module SocketIO
           @reconnecting = false
           @state = :disconnect
           @auto_reconnection = true
+          @attempts = 0
 
           this = self
 
@@ -49,23 +50,27 @@ module SocketIO
 
 
         def connect
+          this = self
           query = @opts.map{|k,v| URI.encode "#{k}=#{v}" }.join '&'
           begin
-            puts "Connect socket attempt to #{@url}"
+            
+            @attempts += 1
+            puts "Connect socket attempt #{@attempts} to #{@url}"
             threadCount=Thread.list.select {|thread| thread.status == "run"}.count
-            puts "Threads #{threadCount} counted"
+            #puts "Threads #{threadCount} counted"
             @websocket = WebSocket::Client::Simple.connect "#{@url}/socket.io/?#{query}"
             puts 'Socket connected'
           rescue Errno::ECONNREFUSED => e
             puts "Connection refused to #{@url}"
-            @state = :disconnect
+            this.state = :disconnect
             @reconnecting = false
+            #this.__emit :disconnect
+           # puts "Emit disconnect"
             reconnect
             return
           end
           @reconnecting = false
 
-          this = self
 
           @websocket.on :error do |err|
             if err.kind_of? Errno::ECONNRESET and this.state == :connect
@@ -97,7 +102,7 @@ module SocketIO
               this.state = :connect
               this.__emit :connect
             when 3  ## pong
-              p "Pong"
+             # p "Pong"
               this.last_pong_at = Time.now.to_i
             when 41  ## disconnect from server
               this.websocket.close if this.websocket.open?
@@ -120,17 +125,19 @@ module SocketIO
          @websocket.close unless @websocket.nil?
         end
         def reconnect
-          begin
-            close if open?
-          ensure
-            puts 'Already reconnecting' if @reconnecting
-            puts 'No auto reconnect'  unless @auto_reconnection
-            return unless @auto_reconnection
-            return if @reconnecting
-            @reconnecting = true
-            sleep rand(5) + 5
-            puts 'Socket reconnect'
-            connect
+          if @attempts<20
+            begin
+              close if open?
+            ensure
+              puts 'Already reconnecting' if @reconnecting
+              puts 'No auto reconnect'  unless @auto_reconnection
+              return unless @auto_reconnection
+              return if @reconnecting
+              @reconnecting = true
+              sleep rand(5) + 5
+             # puts "Socket reconnect attempt #{@attempts}"
+              connect
+            end
           end
         end
 

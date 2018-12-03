@@ -26,26 +26,6 @@ module SocketIO
 
           this = self
 
-          Thread.new do
-            loop do
-              if @websocket
-                if @state == :connect
-                  if Time.now.to_i - this.last_pong_at > @ping_interval/1000
-                    @websocket.send "2"  ## ping
-                    this.last_pong_at = Time.now.to_i
-                  end
-                end
-                if @websocket.open? and Time.now.to_i - this.last_pong_at > @ping_timeout/1000
-                  @websocket.close
-                  @state = :disconnect
-                  __emit :disconnect
-                  reconnect
-                end
-              end
-              sleep 1
-            end
-          end
-
         end
 
 
@@ -60,6 +40,36 @@ module SocketIO
             #puts "Threads #{threadCount} counted"
             @websocket = WebSocket::Client::Simple.connect "#{@url}/socket.io/?#{query}"
             puts 'Socket connected'
+
+            begin
+              Thread.new do
+                loop do
+                  if @websocket
+                    if @state == :connect
+                      if Time.now.to_i - this.last_pong_at > @ping_interval/1000
+                        @websocket.send "2"  ## ping
+                        this.last_pong_at = Time.now.to_i
+                      end
+                      #puts "#{@url} last pong #{this.last_pong_at}"
+                    end
+                    if @websocket.open? and Time.now.to_i - this.last_pong_at > @ping_timeout/1000
+                      @websocket.close
+                      @state = :disconnect
+                      __emit :disconnect
+                      reconnect
+                      break
+                    else
+                      sleep 1
+                    end
+                  else
+                    break
+                  end
+                end
+              end
+            rescue Exception => e
+              p e
+            end
+
           rescue Errno::ECONNREFUSED => e
             puts "Connection refused to #{@url}"
             this.state = :disconnect
@@ -75,20 +85,27 @@ module SocketIO
           @websocket.on :error do |err|
             if err.kind_of? Errno::ECONNRESET and this.state == :connect
               puts 'Connection reset'
-              this.state = :disconnect
-              this.__emit :disconnect
-              @reconnecting = false
-              this.reconnect
+              begin
+                this.state = :disconnect
+                this.__emit :disconnect
+                @reconnecting = false
+                puts 'Reconnect'
+                this.reconnect
+              rescue Exception => e
+                p e
+              end
               next
             end
             this.__emit :error, err
           end
 
           @websocket.on :message do |msg|
-           # puts msg
+           #puts msg
             next unless msg.data =~ /^\d+/
             code, body = msg.data.scan(/^(\d+)(.*)$/)[0]
             code = code.to_i
+           # puts code
+           # puts body
             this.reconnecting = false
             case code
             when 0  ##  socket.io connect
@@ -102,7 +119,7 @@ module SocketIO
               this.state = :connect
               this.__emit :connect
             when 3  ## pong
-             # p "Pong"
+             # puts "Pong from #{@url}"
               this.last_pong_at = Time.now.to_i
             when 41  ## disconnect from server
               this.websocket.close if this.websocket.open?
@@ -110,8 +127,10 @@ module SocketIO
               this.__emit :disconnect
               this.reconnect
             when 42  ## data
+             # p body
               data = JSON.parse body rescue next
               event_name = data.shift
+             # p event_name
               this.__emit event_name, *data
             end
           end
@@ -125,6 +144,7 @@ module SocketIO
          @websocket.close unless @websocket.nil?
         end
         def reconnect
+          puts "Attempts #{ attempts}"
           if @attempts<20
             begin
               close if open?
@@ -153,6 +173,7 @@ module SocketIO
         end
 
         def disconnect
+          puts "Disconnected from #{@url}"
           @auto_reconnection = false
           begin
             close

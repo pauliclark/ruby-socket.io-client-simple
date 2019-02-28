@@ -145,7 +145,7 @@ module SocketIO
         end
         def reconnect
           puts "Attempts #{ attempts}"
-          if @attempts<20
+          if @attempts<200
             begin
               close if open?
             ensure
